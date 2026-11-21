@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: converter
+      POSTGRES_USER: converter
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-converter_dev_only}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U converter -d converter"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: File Converter API
+      MAX_UPLOAD_MB: 20
+      CORS_ORIGINS: http://localhost:3000
+      DATA_DIR: /app/data
+      DATABASE_URL: postgresql+psycopg://converter:${POSTGRES_PASSWORD:-converter_dev_only}@postgres:5432/converter
+      REDIS_URL: redis://redis:6379/0
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+    volumes:
+      - converter_data:/app/data
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  converter_data:
+  postgres_data:
+  redis_data:
